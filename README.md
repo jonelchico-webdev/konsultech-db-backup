@@ -4,10 +4,20 @@ Daily backup of the **production** databases to Cloudflare R2. Runs as a Railway
 
 Each run:
 1. `pg_dump` (custom format) of emr-be's database (`Postgres`) and admin-api's database (`Postgres-Vmz9`)
-2. Checks each dump is a readable archive (`pg_restore -l`)
+2. **Restore check:** restores the dump into a throwaway Postgres inside the same container (never production), and checks every table in the dump came back with no errors
 3. Encrypts it with [age](https://age-encryption.org) using a **public** key: the service can't decrypt its own backups
-4. Uploads `<db>/<yyyy>/<mm>/<dd>/<db>-<timestamp>.dump.age` plus a `.sha256` file to R2
+4. Uploads `<db>/<yyyy>/<mm>/<dd>/<db>-<timestamp>.dump.age` plus a `.sha256` file to R2. A dump that fails the restore check is still uploaded (a suspect backup beats none), but the run fails
 5. Exits non-zero if either database failed (shows as a failed run in Railway), and optionally pings a dead-man switch
+
+A healthy run logs, per database:
+
+```
+restore-check: 23 tables, 1234 rows restored (expected 23 tables, 0 errors)
+uploaded: emr -> emr/2026/10/24/emr-2026-10-24T18-00-00Z.dump.age (3.1M)
+ok: emr
+```
+
+The restore check proves the dump is complete and restorable. It can't prove your **private key** still opens the files (that key is deliberately not in Railway), so do the manual restore below every few months, and whenever the key is moved or re-stored.
 
 ## One-time setup
 
